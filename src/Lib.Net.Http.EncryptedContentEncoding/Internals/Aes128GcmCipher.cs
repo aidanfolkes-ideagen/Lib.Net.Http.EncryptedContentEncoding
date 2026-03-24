@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 #if NETSTANDARD2_1
 using System.Security.Cryptography;
 #else
@@ -65,6 +65,7 @@ namespace Lib.Net.Http.EncryptedContentEncoding.Internals
         private readonly KeyParameter _key;
         private readonly byte[] _nonceInfoParameterHash;
         private readonly GcmBlockCipher _aes128GcmCipher;
+        private bool _cipherInitialized;
 
         public Aes128GcmCipher(byte[] contentEncryptionKeyInfoParameterHash, byte[] nonceInfoParameterHash)
         {
@@ -78,23 +79,28 @@ namespace Lib.Net.Http.EncryptedContentEncoding.Internals
 
         public int Encrypt(byte[] plainText, int plainTextLength, byte[] cipherTextBuffer, ulong recordSequenceNumber)
         {
-            ConfigureAes128GcmCipher(_aes128GcmCipher, true, _key, _nonceInfoParameterHash, recordSequenceNumber);
+            ConfigureAes128GcmCipher(true, recordSequenceNumber);
 
             return Aes128GcmCipherProcessBytes(_aes128GcmCipher, plainText, plainTextLength, cipherTextBuffer);
         }
 
         public int Decrypt(byte[] cipherText, int cipherTextLength, byte[] plainTextBuffer, ulong recordSequenceNumber)
         {
-            ConfigureAes128GcmCipher(_aes128GcmCipher, false, _key, _nonceInfoParameterHash, recordSequenceNumber);
+            ConfigureAes128GcmCipher(false, recordSequenceNumber);
 
             return Aes128GcmCipherProcessBytes(_aes128GcmCipher, cipherText, cipherTextLength, plainTextBuffer);
         }
 
-        private static void ConfigureAes128GcmCipher(GcmBlockCipher aes128GcmCipher, bool forEncryption, KeyParameter key, byte[] nonceInfoParameterHash, ulong recordSequenceNumber)
+        private void ConfigureAes128GcmCipher(bool forEncryption, ulong recordSequenceNumber)
         {
-            aes128GcmCipher.Reset();
-            AeadParameters aes128GcmParameters = new AeadParameters(key, 128, Aes128GcmHelper.XorNonce(nonceInfoParameterHash, recordSequenceNumber));
-            aes128GcmCipher.Init(forEncryption, aes128GcmParameters);
+            if (_cipherInitialized)
+            {
+                _aes128GcmCipher.Reset();
+            }
+
+            AeadParameters aes128GcmParameters = new AeadParameters(_key, 128, Aes128GcmHelper.XorNonce(_nonceInfoParameterHash, recordSequenceNumber));
+            _aes128GcmCipher.Init(forEncryption, aes128GcmParameters);
+            _cipherInitialized = true;
         }
 
         private static int Aes128GcmCipherProcessBytes(GcmBlockCipher aes128GcmCipher, byte[] bytesToProcess, int bytesToProcessLength, byte[] processedBytesBuffer)
